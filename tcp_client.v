@@ -100,79 +100,73 @@
           /* Finite State Machine */
           case(state)
             STATE_00 : 
-                begin
+                begin /* Start of State 0 case */
                 state = STATE_01;
-                end
+                end /* End of State 0 case */
             
             STATE_01 : 
-                begin
+                begin /* Start of State 1 case */
                 /* Await input from user (TestBench) to start */
                 if(in_syn == 1)
                 state = STATE_02;
-                end
+                end /* End of State 1 case */
             
             STATE_02 : 
-                begin
+                begin /* Start of State 2 case */
                 /* Await SYN ACK Flag from Server */
                 if(in_ack_num == 1)
                 state = STATE_03;
                 
                 /* If reset received go back to State 1 */
-                if(in_rst == 1)
+                else if(in_rst == 1)
+                begin /* Start of else if statement */
                 state = STATE_01;
-                end
+                end /* This ends the else if statement */
+                 
+                end /* End of State 2 case */
             
             /* Establish connection with server */
             STATE_03 : 
-                begin
-
-                /* If reset received go back to State 1 */
-                if(in_rst == 1)
-                state = STATE_01;
-
-                /* Data Transfer between Client and Sever Complete */
-                /* Endless loop awaiting Test Bench input or a FIN flag form the server */
-                while(in_fin == 0)
-                    /* Timeout if packets not within 3 packet attempts */ 
-                    if(connectionCounter > 3)
-                    /* Go to State 4 if counter reached */ 
-                    out_fin = 1;
-                    state = STATE_04;
-                    connectionCounter++; /* Increment counter */
-                
-                if(in_fin == 1 && in_ack == 1)  
-                state = STATE_04;
-            
-                
-                /* Receive FIN flag from server */
-                if(in_fin == 1)
-                state = STATE_05;
-
-                end
+                begin /* Begins the State 3 case */
+                 
+                 /* If reset received go back to State 1 */
+                 if(in_rst == 1)
+                 state = STATE_01;
+                  
+                 /* Data Transfer established with Server go to State 4 */
+                 else if(in_fin == 1 && in_ack == 1) 
+                 begin /* Start of else if statement */
+                 out_fin = 1;
+                 state = STATE_04;
+                 end /* This ends the else if statement */
+                 
+                 /* Receive FIN flag from server go to State 5 */
+                 else if(in_fin == 1)
+                 begin /* Start of else if statement */
+                 state = STATE_05;
+                 end /* This ends the else if statement */
+                 
+                 end /* End of State 3 case */
             
             /* Send FIN Flag to close connection */
             STATE_04 : 
-                begin
+                begin /* Begins the State 4 case */
 
                 if(in_fin == 1 && in_ack == 1) 
                 state = STATE_01; 
 
-                end
+                end /* End of State 4 case */
             
             /* Send the FIN ACK flag to Server */
             STATE_05 : 
-                begin
+                begin /* Begins State 5 case */
 
                 out_fin = 1;
                 out_ack = 1;
 
                 state = STATE_01;
-                end
+                end /* End of State 5 case */
             
-
-
-
-
             STATE_06 : 
                 begin
                 state = STATE_07;
@@ -185,34 +179,7 @@
                 begin
                 state = STATE_09;
                 end
-            STATE_09 : 
-                begin
-                state = STATE_10;
-                end
-            STATE_10 : 
-                begin
-                state = STATE_11;
-                end
-            STATE_11 : 
-                begin
-                state = STATE_12;
-                end
-            STATE_12 : 
-                begin
-                state = STATE_13;
-                end
-            STATE_13 : 
-                begin
-                state = STATE_14;
-                end
-            STATE_14 : 
-                begin
-                state = STATE_15;
-                end
-            STATE_15 : 
-                begin
-                state = STATE_00;
-                end
+
           endcase
           end
     end
