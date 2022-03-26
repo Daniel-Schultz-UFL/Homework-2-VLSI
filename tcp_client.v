@@ -1,16 +1,16 @@
 /****************************************************************************
- * Author: 
+ * Author:
  * Desciption: TCP Client Controller
  ****************************************************************************/
 
  module tcp_client (input clk, input rst, input[223:0] packet_in, 
-                     output[223:0] packet_out);
+                     output reg[223:0] packet_out);
 
     /* State Definitions */
     localparam
-        STATE_00    = 4'b0000,
-        STATE_01    = 4'b0001,
-        STATE_02    = 4'b0010,
+        LISTEN      = 4'b0000,
+        SYN_RCVD    = 4'b0001,
+        ESTABLISHED = 4'b0010,
         STATE_03    = 4'b0011,
         STATE_04    = 4'b0100,
         STATE_05    = 4'b0101,
@@ -90,98 +90,120 @@
     /* State Machine */
     always @ (posedge clk) 
     begin
-        if (rst)
-          begin
-          state <= STATE_00;
-          end
-        else
-          begin
-          $display("State = %d", state);
-          /* Finite State Machine */
-          case(state)
-            STATE_00 : 
-                begin /* Start of State 0 case */
-                state = STATE_01;
-                end /* End of State 0 case */
-            
-            STATE_01 : 
-                begin /* Start of State 1 case */
-                /* Await input from user (TestBench) to start */
-                if(in_syn == 1)
-                state = STATE_02;
-                end /* End of State 1 case */
-            
-            STATE_02 : 
-                begin /* Start of State 2 case */
-                /* Await SYN ACK Flag from Server */
-                if(in_ack_num == 1)
-                state = STATE_03;
-                
-                /* If reset received go back to State 1 */
-                else if(in_rst == 1)
-                begin /* Start of else if statement */
-                state = STATE_01;
-                end /* This ends the else if statement */
-                 
-                end /* End of State 2 case */
-            
-            /* Establish connection with server */
-            STATE_03 : 
-                begin /* Begins the State 3 case */
-                 
-                 /* If reset received go back to State 1 */
-                 if(in_rst == 1)
-                 state = STATE_01;
-                  
-                 /* Data Transfer established with Server go to State 4 */
-                 else if(in_fin == 1 && in_ack == 1) 
-                 begin /* Start of else if statement */
-                 out_fin = 1;
-                 state = STATE_04;
-                 end /* This ends the else if statement */
-                 
-                 /* Receive FIN flag from server go to State 5 */
-                 else if(in_fin == 1)
-                 begin /* Start of else if statement */
-                 state = STATE_05;
-                 end /* This ends the else if statement */
-                 
-                 end /* End of State 3 case */
-            
-            /* Send FIN Flag to close connection */
-            STATE_04 : 
-                begin /* Begins the State 4 case */
 
-                if(in_fin == 1 && in_ack == 1) 
-                state = STATE_01; 
+    /* Grabbing the Input TCP Packet and setting the output TCP Packet 
+     * should happen regardless of rst. Set outside of if rst else */
 
-                end /* End of State 4 case */
-            
-            /* Send the FIN ACK flag to Server */
-            STATE_05 : 
-                begin /* Begins State 5 case */
+    /* Step 1: Grab input packet and decode signals coming from Sever */
+    in_dest_port        = packet_in[TCP_DEST_PORT_ADDR:0];
+    in_src_port         = packet_in[TCP_SRC_PORT_ADDR:TCP_DEST_PORT_ADDR+1];
+    in_seq_num          = packet_in[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1];
+    in_ack_num          = packet_in[TCP_ACK_NUM:TCP_SEQ_NUM+1];
+    in_window_size      = packet_in[TCP_WINDOW_SIZE:TCP_ACK_NUM+1];
+    in_fin              = packet_in[TCP_FIN];
+    in_syn              = packet_in[TCP_SYN];
+    in_rst              = packet_in[TCP_RST];
+    in_psh              = packet_in[TCP_PSH];
+    in_ack              = packet_in[TCP_ACK];
+    in_urg              = packet_in[TCP_URG];
+    in_reserved_bits    = packet_in[TCP_RESERVED_BITS:TCP_URG+1];
+    in_header_len       = packet_in[TCP_HEADER_LEN:TCP_RESERVED_BITS+1];
+    in_urgent_pointer   = packet_in[TCP_URGENT_POINTER:TCP_HEADER_LEN+1];
+    in_checksum         = packet_in[TCP_CHECKSUM:TCP_URGENT_POINTER+1];
+    in_options          = packet_in[TCP_OPTIONS:TCP_CHECKSUM+1];
+    in_data             = packet_in[TCP_DATA:TCP_OPTIONS+1]; 
 
-                out_fin = 1;
-                out_ack = 1;
+    /* Step 2: Assign default values for output packet to Server */
+    packet_out[TCP_DEST_PORT_ADDR:0]                    = {16{1'b1}};
+    packet_out[TCP_SRC_PORT_ADDR:TCP_DEST_PORT_ADDR+1]  = {16{1'b1}};
+    packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1]         = {32{1'b1}};
+    packet_out[TCP_ACK_NUM:TCP_SEQ_NUM+1]               = {32{1'b1}};
+    packet_out[TCP_WINDOW_SIZE:TCP_ACK_NUM+1]           = {16{1'b1}};
+    packet_out[TCP_FIN]                                 = 1'b1;
+    packet_out[TCP_SYN]                                 = 1'b1;
+    packet_out[TCP_RST]                                 = 1'b1;
+    packet_out[TCP_PSH]                                 = 1'b1;
+    packet_out[TCP_ACK]                                 = 1'b1;
+    packet_out[TCP_URG]                                 = 1'b1;
+    packet_out[TCP_RESERVED_BITS:TCP_URG+1]             = {6{1'b1}};
+    packet_out[TCP_HEADER_LEN:TCP_RESERVED_BITS+1]      = {4{1'b1}};
+    packet_out[TCP_URGENT_POINTER:TCP_HEADER_LEN+1]     = {16{1'b1}};
+    packet_out[TCP_CHECKSUM:TCP_URGENT_POINTER+1]       = {16{1'b1}};
+    packet_out[TCP_OPTIONS:TCP_CHECKSUM+1]              = {32{1'b1}};
+    packet_out[TCP_DATA:TCP_OPTIONS+1]                  = {32{1'b1}}; 
 
-                state = STATE_01;
-                end /* End of State 5 case */
-            
-            STATE_06 : 
-                begin
-                state = STATE_07;
-                end
-            STATE_07 : 
-                begin
-                state = STATE_08;
-                end
-            STATE_08 : 
-                begin
-                state = STATE_09;
-                end
+    /* Step 3: Determine the next state and override any TCP output bits */
+    /* Hard reset */
+    if (rst)    
+      begin
+      state <= LISTEN;
+      end
+    else
+      begin
+      $display("State = %d", state);
+      /* Finite State Machine */
+      case(state)
 
-          endcase
-          end
+      /* Await input from user */
+        LISTEN : 
+            begin
+            /* Did we receive SYN request from client? */
+            if (in_syn)
+                state = SYN_RCVD; /* Yes, then go next state */
+            else
+                state = LISTEN; /* No, then keep listening */
+            end
+        
+        ACK_RCVD : 
+            begin
+            /* Did we receive ACK from client? */
+            if (in_ack)
+                state = ESTABLISHED; /* Yes, go to establish and share data */
+            else
+                state = SYN_RCVD; /* No, keep waiting for ack from client */
+            end
+        
+        /* Connection made Server and Client */
+        ESTABLISHED : 
+            /* This is where we share data */
+            begin
+            if(in_fin)
+            state = FIN_ACK_SEND;   /* Yes, go and send the FIN/ACK to server */
+            /* Decide what variable will end the connection */
+            else if(in_seq_num > 10)
+            begin
+            state = FIN_SEND;
+            end
+            else
+            state = LISTEN; /* No, go back and listen */
+            end
+        
+        /* Send the FIN and ACK to server */
+        FIN_ACK_SEND:
+            begin
+            out_fin = 1;    /* FIN Flag */
+            out_ack = 1;    /* ACK Flag */
+            state = LISTEN; /* Go back to Listening */
+            end
+
+        /* Terminate connection between Client and Server */
+        FIN_SEND :
+            begin
+            out_fin = 1;
+            state = FIN_ACK_LISTEN;
+            end
+
+        /* Await FIN/ACK from the Server */
+        FIN_ACK_LISTEN:
+            begin
+            if(in_fin == 1 && in_ack == 1)
+            state = LISTEN;
+            end
+
+
+
+      endcase
+      end
     end
 
 
