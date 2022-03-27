@@ -1,12 +1,27 @@
-/***************************************************************************
- *
- ***************************************************************************/
+module TESTBENCH;
 
- module tcp_client_tb;
-
-    localparam period = 10;
+    localparam period = 10ns;
     
-    /* Packet Address Locations */
+       /* State Definitions */
+    localparam
+        START         = 4'b0000,
+        ACK_RCVD      = 4'b0001,
+        ESTABLISHED   = 4'b0010,
+        FIN_ACK_SEND  = 4'b0011,
+        FIN_SEND      = 4'b0100,
+        FIN_ACK_LISTEN= 4'b0101,
+        STATE_06      = 4'b0110,
+        STATE_07      = 4'b0111,
+        STATE_08      = 4'b1000,
+        STATE_09      = 4'b1001,
+        STATE_10      = 4'b1010,
+        STATE_11      = 4'b1011,
+        STATE_12      = 4'b1100,
+        STATE_13      = 4'b1101,
+        STATE_14      = 4'b1110,
+        STATE_15      = 4'b1111;
+        
+            /* Packet Address Locations */
     localparam
         TCP_DEST_PORT_ADDR  = 15,  /* WORD 0: 15-0    */
         TCP_SRC_PORT_ADDR   = 31,  /* WORD 0: 31-16   */
@@ -25,44 +40,115 @@
         TCP_CHECKSUM        = 159, /* WORD 4: 159-144 */
         TCP_OPTIONS         = 191, /* WORD 5: 191-160 */
         TCP_DATA            = 223; /* WORD 6: 223-192 */
-
-    task send_server_syn;
-        inout [223:0] tcp_packet;
-        begin
-            tcp_packet[TCP_SYN] = 1'b1;
-        end
-    endtask
-
-    task send_server_ack;
-        inout [223:0] tcp_packet;
-        begin
-            tcp_packet[TCP_ACK] = 1'b1;
-        end
-    endtask
-
+        
+    // Setting initial memory
     reg clk = 0;
     reg rst = 0;
-    reg[223:0] packet_in = 224'b1;
+    reg go  = 0;
+    reg fin = 0;
+    reg[223:0] packet_in = 224'b0;
+    reg[31:0] old_packet_seq_num = 0;
+    reg[31:0] test = 0;
     wire[223:0] packet_out;
+    
 
-    tcp_server DUT (.clk(clk), .rst(rst),
-                    .packet_in(packet_in), .packet_out(packet_out));
+
+    tcp_client client (clk,rst,packet_in, go, fin, packet_out);
 
     always #10 clk=!clk;
 
     initial
     begin
-        $dumpfile("wave.vcd");
-        $dumpvars(0, tcp_client_tb);
+        //Initialize the system
         clk = 0;
         rst = 1'b1;
-        #20 rst = 1'b0;
-        #40 send_server_syn(packet_in);
-        #40 send_server_ack(packet_in);
+        #20 rst = 1'b0;//turn off reset
+        
+        // Start sending data
+        #30 go = 1'b1;
+        
+        //Check if we recieved sync, if so, move to next ACK_RCVD
+        #40 
+        begin
+        go = 1'b0;
+            if (packet_out[TCP_SYN] == 1)
+            begin
+                packet_in[TCP_SYN] = 1;
+                packet_in[TCP_ACK] = 1;
+            end
+        end    
+            
+        //Commumcation has been established, reply with ACK number [PACKET 1]
+        #50
+        begin
+        packet_in[TCP_ACK] = 0; //clear ACK
+        
+            //Check if a new packet has come and if so, send ack for next packet)
+            if ((packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1] != old_packet_seq_num)|| (packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1] == 0))
+            begin
+                packet_in[TCP_ACK_NUM:TCP_SEQ_NUM+1]= packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1] + 32;
+                packet_in[TCP_ACK] = 1;
+                test = packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1] + 32;
+            end
+        end
+
+        //Commumcation has been established, reply with ACK number [PACKET 2]        
+        #60
+        begin
+        packet_in[TCP_ACK] = 0; //clear ACK
+        
+            //Check if a new packet has come and if so, send ack for next packet)
+            if ((packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1] != old_packet_seq_num)|| (packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1] == 0))
+            begin
+                packet_in[TCP_ACK_NUM:TCP_SEQ_NUM+1]= packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1] + 32;
+                packet_in[TCP_ACK] = 1;
+                test = packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1] + 32;
+            end
+        end
+ 
+         //Commumcation has been established, reply with ACK number [PACKET 3]       
+        #70
+        begin
+        packet_in[TCP_ACK] = 0; //clear ACK
+        
+            //Check if a new packet has come and if so, send ack for next packet)
+            if ((packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1] != old_packet_seq_num)|| (packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1] == 0))
+            begin
+                packet_in[TCP_ACK_NUM:TCP_SEQ_NUM+1]= packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1] + 32;
+                packet_in[TCP_ACK] = 1;
+                test = packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1] + 32;
+            end
+        end
+        
+        //Have the server send a reset packet
+        //#80 packet_in[TCP_RST] = 1;  
+        
+        
+        //Test Fin from server
+//        #90
+//        begin
+//        packet_in[TCP_FIN] = 1; 
+//        end
+        
+        //Test client to send Fin
+        #100
+        begin
+            packet_in[TCP_ACK] = 0; //clear ACK
+            fin = 1;
+        end
+         
+        #110
+        begin
+         if (packet_out[TCP_FIN])
+             begin
+                 packet_in[TCP_ACK] = 1;
+                 packet_in[TCP_FIN] = 1;
+             end
+         end
     end
 
 
     initial
-    #360 $finish;
+    #700 $finish;
 
  endmodule
