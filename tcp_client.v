@@ -3,12 +3,19 @@
  * Desciption: TCP Client Controller
  ****************************************************************************/
 
- module tcp_client (input clk, input rst, input[223:0] packet_in, 
-                     output reg[223:0] packet_out);
+ module tcp_client (
+                    //INPUT
+                    input clk,
+                    input rst,
+                    input[223:0] packet_in,
+                    input go,
+                    input fin,
+                    //OUTPUT
+                    output reg[223:0] packet_out);
 
     /* State Definitions */
     localparam
-        LISTEN        = 4'b0000,
+        START         = 4'b0000,
         ACK_RCVD      = 4'b0001,
         ESTABLISHED   = 4'b0010,
         FIN_ACK_SEND  = 4'b0011,
@@ -113,7 +120,7 @@
     in_options          = packet_in[TCP_OPTIONS:TCP_CHECKSUM+1];
     in_data             = packet_in[TCP_DATA:TCP_OPTIONS+1]; 
 
-    /* Step 2: Assign default values for output packet to Server */
+    /* Step 2: Assign default values for output packet to Server
     packet_out[TCP_DEST_PORT_ADDR:0]                    = {16{1'b1}};
     packet_out[TCP_SRC_PORT_ADDR:TCP_DEST_PORT_ADDR+1]  = {16{1'b1}};
     packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1]         = {32{1'b1}};
@@ -130,35 +137,78 @@
     packet_out[TCP_URGENT_POINTER:TCP_HEADER_LEN+1]     = {16{1'b1}};
     packet_out[TCP_CHECKSUM:TCP_URGENT_POINTER+1]       = {16{1'b1}};
     packet_out[TCP_OPTIONS:TCP_CHECKSUM+1]              = {32{1'b1}};
-    packet_out[TCP_DATA:TCP_OPTIONS+1]                  = {32{1'b1}}; 
+    packet_out[TCP_DATA:TCP_OPTIONS+1]                  = {32{1'b1}}; */
 
     /* Step 3: Determine the next state and override any TCP output bits */
     /* Hard reset */
     if (rst)    
       begin
-      state <= LISTEN;
+      state <= START;
+      
+      //clear ouput registers
+            out_dest_port      = {16{1'b0}};
+            out_src_port       = {16{1'b0}};
+            out_seq_num        = {32{1'b0}};
+            out_ack_num        = {32{1'b0}};
+            out_window_size    = {16{1'b0}};
+            out_fin            = 1'b0;
+            out_syn            = 1'b0;
+            out_rst            = 1'b0;
+            out_psh            = 1'b0;
+            out_ack            = 1'b0;
+            out_urg            = 1'b0;
+            out_reserved_bits  = {6{1'b0}};
+            out_header_len     = {4{1'b0}};
+            out_urgent_pointer = {16{1'b0}};
+            out_checksum       = {16{1'b0}};
+            out_options        = {32{1'b0}};
+            out_data           = {32{1'b0}};
       end
     else
       begin
-      $display("State = %d", state);
+
       /* Finite State Machine */
       case(state)
 
       /* Await input from user */
-        LISTEN : 
+        START : 
             begin
-            /* Did we receive SYN request from client? */
-            if (in_syn)
+            //clear ouput registers
+            out_dest_port      = {16{1'b0}};
+            out_src_port       = {16{1'b0}};
+            out_seq_num        = {32{1'b0}};
+            out_ack_num        = {32{1'b0}};
+            out_window_size    = {16{1'b0}};
+            out_fin            = 1'b0;
+            out_syn            = 1'b0;
+            out_rst            = 1'b0;
+            out_psh            = 1'b0;
+            out_ack            = 1'b0;
+            out_urg            = 1'b0;
+            out_reserved_bits  = {6{1'b0}};
+            out_header_len     = {4{1'b0}};
+            out_urgent_pointer = {16{1'b0}};
+            out_checksum       = {16{1'b0}};
+            out_options        = {32{1'b0}};
+            out_data           = {32{1'b0}};
+            //Send syn message
+            if (go)
+                begin
+                out_syn = 1'b1; /* Yes, then go next state */
                 state = ACK_RCVD; /* Yes, then go next state */
+                end
             else
-                state = LISTEN; /* No, then keep listening */
+                state = START; /* No, then keep listening */
             end
         
         ACK_RCVD : 
             begin
             /* Did we receive ACK from client? */
             if (in_ack)
+                begin
                 state = ESTABLISHED; /* Yes, go to establish and share data */
+                out_ack = 1;
+                end
             else
                 state = ACK_RCVD; /* No, keep waiting for ack from client */
             end
@@ -167,15 +217,25 @@
         ESTABLISHED : 
             /* This is where we share data */
             begin
-            if(in_fin)
+            //clear ack in case of server reset
+            out_ack = 0;
+            
+            //send seq number to SERVER
+            if  (packet_in[TCP_ACK]== 1)
+            out_seq_num = packet_in[TCP_ACK_NUM:TCP_SEQ_NUM+1];            
+    
+    
+             if (packet_in[TCP_RST])//Reset Client if the Server sends a reset
+            state = START; /* No, go back and listen */           
+            else if(in_fin)
             state = FIN_ACK_SEND;   /* Yes, go and send the FIN/ACK to server */
             /* Decide what variable will end the connection */
-            else if(in_seq_num > 10)
+            else if(fin)
             begin
             state = FIN_SEND;
             end
-            else
-            state = LISTEN; /* No, go back and listen */
+
+            
             end
         
         /* Send the FIN and ACK to server */
@@ -183,7 +243,7 @@
             begin
             out_fin = 1;    /* FIN Flag */
             out_ack = 1;    /* ACK Flag */
-            state = LISTEN; /* Go back to Listening */
+            state = START; /* Go back to Listening */
             end
 
         /* Terminate connection between Client and Server */
@@ -196,14 +256,34 @@
         /* Await FIN/ACK from the Server */
         FIN_ACK_LISTEN:
             begin
-            if(in_fin == 1 && in_ack == 1)
-            state = LISTEN;
+            
+            if(in_fin && in_ack)
+            state = START;
             end
 
 
 
       endcase
       end
+    packet_out[TCP_DEST_PORT_ADDR:0]                    = out_dest_port;
+    packet_out[TCP_SRC_PORT_ADDR:TCP_DEST_PORT_ADDR+1]  = out_src_port;
+    packet_out[TCP_SEQ_NUM:TCP_SRC_PORT_ADDR+1]         = out_seq_num;
+    packet_out[TCP_ACK_NUM:TCP_SEQ_NUM+1]               = out_ack_num;
+    packet_out[TCP_WINDOW_SIZE:TCP_ACK_NUM+1]           = out_window_size;
+    packet_out[TCP_FIN]                                 = out_fin;
+    packet_out[TCP_SYN]                                 = out_syn;
+    packet_out[TCP_RST]                                 = out_rst;
+    packet_out[TCP_PSH]                                 = out_psh;
+    packet_out[TCP_ACK]                                 = out_ack;
+    packet_out[TCP_URG]                                 = out_urg;
+    packet_out[TCP_RESERVED_BITS:TCP_URG+1]             = out_reserved_bits;
+    packet_out[TCP_HEADER_LEN:TCP_RESERVED_BITS+1]      = out_header_len;
+    packet_out[TCP_URGENT_POINTER:TCP_HEADER_LEN+1]     = out_urgent_pointer;
+    packet_out[TCP_CHECKSUM:TCP_URGENT_POINTER+1]       = out_checksum;
+    packet_out[TCP_OPTIONS:TCP_CHECKSUM+1]              = out_options;
+    packet_out[TCP_DATA:TCP_OPTIONS+1]                  = out_data;    
+      
+      
     end
 
 
