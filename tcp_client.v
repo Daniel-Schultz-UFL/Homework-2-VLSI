@@ -8,22 +8,22 @@
 
     /* State Definitions */
     localparam
-        LISTEN      = 4'b0000,
-        SYN_RCVD    = 4'b0001,
-        ESTABLISHED = 4'b0010,
-        STATE_03    = 4'b0011,
-        STATE_04    = 4'b0100,
-        STATE_05    = 4'b0101,
-        STATE_06    = 4'b0110,
-        STATE_07    = 4'b0111,
-        STATE_08    = 4'b1000,
-        STATE_09    = 4'b1001,
-        STATE_10    = 4'b1010,
-        STATE_11    = 4'b1011,
-        STATE_12    = 4'b1100,
-        STATE_13    = 4'b1101,
-        STATE_14    = 4'b1110,
-        STATE_15    = 4'b1111;
+        LISTEN        = 4'b0000,
+        ACK_RCVD      = 4'b0001,
+        ESTABLISHED   = 4'b0010,
+        FIN_ACK_SEND  = 4'b0011,
+        FIN_SEND      = 4'b0100,
+        FIN_ACK_LISTEN= 4'b0101,
+        STATE_06      = 4'b0110,
+        STATE_07      = 4'b0111,
+        STATE_08      = 4'b1000,
+        STATE_09      = 4'b1001,
+        STATE_10      = 4'b1010,
+        STATE_11      = 4'b1011,
+        STATE_12      = 4'b1100,
+        STATE_13      = 4'b1101,
+        STATE_14      = 4'b1110,
+        STATE_15      = 4'b1111;
 
     /* Variable List */
     reg[3:0] state;
@@ -149,7 +149,7 @@
             begin
             /* Did we receive SYN request from client? */
             if (in_syn)
-                state = SYN_RCVD; /* Yes, then go next state */
+                state = ACK_RCVD; /* Yes, then go next state */
             else
                 state = LISTEN; /* No, then keep listening */
             end
@@ -160,7 +160,7 @@
             if (in_ack)
                 state = ESTABLISHED; /* Yes, go to establish and share data */
             else
-                state = SYN_RCVD; /* No, keep waiting for ack from client */
+                state = ACK_RCVD; /* No, keep waiting for ack from client */
             end
         
         /* Connection made Server and Client */
